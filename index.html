@@ -616,7 +616,15 @@
                         <button class="btn small" onclick="makeShareUrl('normal')">Share Playback URL</button>
                         <button class="btn small" onclick="createUrlsFromSelected('normal')">Create URLs &
                             Export</button>
+
                     </div>
+
+                    <div style="margin-top:8px;display:flex;gap:12px;align-items:center">
+                        <strong>Search Mode:</strong>
+                        <label><input type="radio" name="fetchMode" value="PAIR" checked /> OAID + MFL</label>
+                        <label><input type="radio" name="fetchMode" value="DESC" /> Description</label>
+                    </div>
+
 
 
                     <div style="margin-top:10px">
@@ -1114,6 +1122,12 @@
                 header.indeterminate = !all && any;
             }
         }
+
+        function getFetchMode() {
+            const el = document.querySelector('input[name="fetchMode"]:checked');
+            return el ? el.value : 'PAIR';
+        }
+
 
         // row checkbox change for normal page (REPLACEMENT)
         function onRowSelectChange(e) {
@@ -1646,36 +1660,30 @@
         // parse input: each non-empty line -> [override, mfl]
         // accepts tab, comma, or whitespace as separator; returns array of {overrideId,mflId}
         function parseFetchInput(text) {
-            const lines = String(text || '')
-                .split(/\r?\n/)
-                .map(l => l.trim())
-                .filter(Boolean);
+            const mode = getFetchMode();
+            const lines = String(text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
-            const entries = [];
-
-            for (const line of lines) {
-                // Try override + mfl (tab / comma / space)
-                let parts = line.split('\t');
-                if (parts.length < 2) parts = line.split(',');
-                if (parts.length < 2) parts = line.split(/\s+/);
-
-                if (parts.length >= 2) {
-                    entries.push({
-                        type: 'PAIR',
-                        overrideId: parts[0].trim(),
-                        mflId: parts[1].trim()
-                    });
-                } else {
-                    // Treat entire line as DESCRIPTION
-                    entries.push({
-                        type: 'DESC',
-                        description: line
-                    });
-                }
+            if (mode === 'DESC') {
+                return lines.map(l => ({
+                    type: 'DESC',
+                    description: l
+                }));
             }
 
-            return entries;
+            // default: OAID + MFL
+            return lines.map(line => {
+                let parts = line.split('\t');
+                if (parts.length < 2) parts = line.split(',');
+                if (parts.length < 2) parts = line.trim().split(/\s+/);
+
+                return {
+                    type: 'PAIR',
+                    overrideId: (parts[0] || '').trim(),
+                    mflId: (parts[1] || '').trim()
+                };
+            });
         }
+
 
 
         // runFetchEvents: ensures outlets are fetched, then searches pairs across outlets in order.
@@ -1859,22 +1867,21 @@
             return false;
         }
 
-        function matchRowByDescription(row, searchText) {
-            if (!searchText) return false;
-            const needle = searchText.toLowerCase();
+        function matchRowByDescription(row, inputDesc) {
+            if (!inputDesc) return false;
 
-            const fieldsToCheck = [
-                row.description,
-                row.raw && row.raw.description,
-                row.raw && row.raw.desc,
-                row.raw && row.raw.title,
-                JSON.stringify(row.raw || {})
-            ];
+            const needle = normalizeDescription(inputDesc);
+            if (!needle) return false;
 
-            return fieldsToCheck.some(f =>
-                typeof f === 'string' && f.toLowerCase().includes(needle)
+            const hay = normalizeDescription(
+                row.description ||
+                (row.raw && (row.raw.description || row.raw.desc)) ||
+                ''
             );
+
+            return hay.includes(needle);
         }
+
 
 
         // renderFetchResults(results) - produce a table with columns: Override, MFL, (normal headers...), Outlet
@@ -2383,6 +2390,17 @@
                 return cur;
             } catch (e) { return undefined }
         }
+
+        function normalizeDescription(str) {
+            return stripHtml(str || '')
+                .toLowerCase()
+                .replace(/^(padel|soccer|basketball|darts)\s*:\s*/i, '')
+                .replace(/\(.*?\)/g, '')      // remove (FRENCH), etc
+                .replace(/dazn\s*only\s*-?/i, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+
 
         /* ---------- Theme ---------- */
         function setTheme(t) { document.body.setAttribute('data-theme', t); State.theme = t; themeToggle.checked = (t === 'dark'); }
