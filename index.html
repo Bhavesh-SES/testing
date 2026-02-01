@@ -1128,6 +1128,27 @@
             return el ? el.value : 'PAIR';
         }
 
+        function onFetchRowSelectChange(e) {
+            const uid = e.target.dataset.uid;
+            if (!uid) return;
+
+            if (e.target.checked) {
+                addOrderedSelection(uid);
+            } else {
+                removeOrderedSelection(uid);
+            }
+        }
+
+        function toggleFetchSelectAll(e) {
+            const checked = e.target.checked;
+            document.querySelectorAll('.fetchRowSelect').forEach(cb => {
+                cb.checked = checked;
+                const uid = cb.dataset.uid;
+                if (!uid) return;
+                if (checked) addOrderedSelection(uid);
+                else removeOrderedSelection(uid);
+            });
+        }
 
         // row checkbox change for normal page (REPLACEMENT)
         function onRowSelectChange(e) {
@@ -1894,82 +1915,104 @@
                 return;
             }
 
-            // build union of headers same as Normal page preferred + any keys from found rows
-            const preferred = ['streamId', 'oaId', 'description', 'streamStartTime', 'streamEndTime', 'drmRequired', 'lastModTime'];
+            // preferred columns (same as Normal page)
+            const preferred = [
+                'streamId',
+                'oaId',
+                'description',
+                'streamStartTime',
+                'streamEndTime',
+                'drmRequired',
+                'lastModTime'
+            ];
+
+            // collect extra keys from raw payload
             const keySet = new Set();
             results.forEach(r => {
                 if (r.foundRow && r.foundRow.raw) {
-                    try { Object.keys(r.foundRow.raw || {}).forEach(k => keySet.add(k)); } catch (e) { }
+                    Object.keys(r.foundRow.raw).forEach(k => keySet.add(k));
                 }
             });
-            const otherKeys = Array.from(keySet).filter(k => !preferred.includes(k));
-            const headers = ['_select', 'Input', 'Override', 'MFL']
+            const otherKeys = [...keySet].filter(k => !preferred.includes(k));
+
+            const headers = ['_select', 'Override', 'MFL']
                 .concat(preferred, otherKeys, ['Outlet']);
 
-
-            // build table
+            /* ---------------- table ---------------- */
             const table = el('table', { class: 'data' });
-            // header row with copy buttons
-            const theadRow = el('tr', {}, headers.map((h, idx) => {
-                const th = el('th', {}, [h]);
-                // add copy button on each header
-                const copyBtn = el('button', { class: 'btn small', onclick: (ev) => { ev.stopPropagation(); copyColumn(table, idx); } }, '⎘');
-                th.appendChild(el('div', { style: 'display:inline-block;margin-left:8px;vertical-align:middle' }, copyBtn));
-                return th;
-            }));
-            table.appendChild(el('thead', {}, theadRow));
 
+            /* ---------------- header ---------------- */
+            const thead = el('thead', {}, el('tr', {}, headers.map((h, idx) => {
+                if (h === '_select') {
+                    return el('th', {}, el('input', {
+                        type: 'checkbox',
+                        onchange: toggleFetchSelectAll
+                    }));
+                }
+                return el('th', {}, h);
+            })));
+            table.appendChild(thead);
+
+            /* ---------------- body ---------------- */
             const tbody = el('tbody');
+
             results.forEach(res => {
-                const rowVals = [];
-                rowVals.push(res.overrideId || '');
-                rowVals.push(res.mflId || '');
                 const rrow = res.foundRow || {};
                 const raw = rrow.raw || {};
 
-                // preferred keys (try flattened property first, else raw)
+                // IMPORTANT: stable UID for selection + URL creation
+                const uid =
+                    rrow.oaId ||
+                    raw.oaId ||
+                    rrow.streamId ||
+                    raw.streamId ||
+                    null;
+
+                const rowVals = [];
+
+                rowVals.push(res.overrideId || '');
+                rowVals.push(res.mflId || '');
+
                 preferred.forEach(k => {
-                    let v = (rrow[k] !== undefined ? rrow[k] : (raw[k] !== undefined ? raw[k] : ''));
-                    if (typeof v === 'object') try { v = JSON.stringify(v); } catch (e) { v = String(v); }
-                    rowVals.push(v === undefined ? '' : String(v));
+                    let v = rrow[k] ?? raw[k] ?? '';
+                    if (typeof v === 'object') v = JSON.stringify(v);
+                    rowVals.push(v);
                 });
 
-                // other keys
                 otherKeys.forEach(k => {
-                    let v = (rrow[k] !== undefined ? rrow[k] : (raw[k] !== undefined ? raw[k] : ''));
-                    if (typeof v === 'object') try { v = JSON.stringify(v); } catch (e) { v = String(v); }
-                    rowVals.push(v === undefined ? '' : String(v));
+                    let v = rrow[k] ?? raw[k] ?? '';
+                    if (typeof v === 'object') v = JSON.stringify(v);
+                    rowVals.push(v);
                 });
 
-                // Outlet column: show names (first found first)
-                const outletsNames = (res.outletsFound || []).map(id => (State.outlets.find(x => x.id === id)?.name || id));
-                const outletCell = outletsNames.length ? outletsNames.join(', ') : (res.found ? (State.outlets.find(x => x.id === res.firstOutletId)?.name || res.firstOutletId) : 'Not found');
-                rowVals.push(outletCell);
-
-                // create tr
-                const uid = rrow.streamId || rrow.oaId || Math.random().toString(36);
+                const outletNames = (res.outletsFound || []).map(id =>
+                    State.outlets.find(x => x.id === id)?.name || id
+                );
+                rowVals.push(
+                    outletNames.length
+                        ? outletNames.join(', ')
+                        : 'Not found'
+                );
 
                 const tr = el('tr', {}, [
                     el('td', {}, el('input', {
                         type: 'checkbox',
-                        class: 'rowSelect',
+                        class: 'fetchRowSelect',
                         'data-uid': uid,
-                        onchange: onRowSelectChange
+                        checked: uid ? State.selectedForExport.has(uid) : false,
+                        onchange: onFetchRowSelectChange
                     })),
-                    el('td', {}, res.inputType === 'DESC' ? res.description : 'Override+MFL'),
                     ...rowVals.map(v => el('td', {}, v))
                 ]);
 
-
-                // highlight row if not found
                 if (!res.found) tr.classList.add('notfound');
-
                 tbody.appendChild(tr);
             });
 
             table.appendChild(tbody);
             container.appendChild(table);
         }
+
 
         // copyColumn helper: copies column cells (0-based idx) text to clipboard
         function copyColumn(tableEl, colIndex) {
