@@ -1422,8 +1422,13 @@
             const table = el('table', { class: 'data' });
             const theadRow = el('tr', {}, headers.map(h => {
                 if (h === '_select') {
-                    return el('th', {}, el('input', { type: 'checkbox', id: 'filterSelectAllVisible', onchange: onToggleFilterSelectAllVisible }));
+                    return el('th', {}, el('input', {
+                        type: 'checkbox',
+                        title: 'Select all rows',
+                        onchange: toggleSelectAll   // ✅ reuse Normal-page handler
+                    }));
                 }
+
                 return el('th', {}, h);
             }));
             table.appendChild(el('thead', {}, theadRow));
@@ -1997,10 +2002,9 @@
                 const tr = el('tr', {}, [
                     el('td', {}, el('input', {
                         type: 'checkbox',
-                        class: 'fetchRowSelect',
+                        class: 'rowSelect',
                         'data-uid': uid,
-                        checked: uid ? State.selectedForExport.has(uid) : false,
-                        onchange: onFetchRowSelectChange
+                        onchange: onRowSelectChange
                     })),
                     ...rowVals.map(v => el('td', {}, v))
                 ]);
