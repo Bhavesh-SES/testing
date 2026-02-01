@@ -1792,52 +1792,6 @@
                     progressCb(pct);
                 }
 
-                const foundOutlets = [];
-                let firstFound = null;
-                let firstRow = null;
-
-                for (const oid of outletIds) {
-                    if (cancelToken.cancelled) throw new Error('Cancelled');
-
-                    const map = perOutletMaps[oid] || { overrideIndex: new Map(), rawRows: [] };
-
-                    // quick check: if override index has entries, test those rows
-                    let candidateRows = [];
-                    if (normOv && map.overrideIndex.has(normOv)) {
-                        candidateRows = map.overrideIndex.get(normOv);
-                    } else {
-                        // fallback: search all rows (rare)
-                        candidateRows = (map.rawRows || []);
-                    }
-
-                    // test candidateRows for mfl match
-                    let matchedRow = null;
-                    for (const r of candidateRows) {
-                        if (matchRowByOverrideAndMFL(r, normOv, normMfl)) {
-                            matchedRow = r;
-                            break;
-                        }
-                    }
-
-                    if (matchedRow) {
-                        foundOutlets.push(oid);
-                        if (!firstFound) {
-                            firstFound = oid;
-                            firstRow = matchedRow;
-                        }
-                        // continue loop to collect other outlets where present (but don't override firstRow)
-                    }
-                }
-
-                results.push({
-                    overrideId: pair.overrideId || '',
-                    mflId: pair.mflId || '',
-                    found: !!firstFound,
-                    firstOutletId: firstFound,
-                    foundRow: firstRow ? firstRow : null,
-                    outletsFound: foundOutlets
-                });
-
                 // progress: allocate remaining 50% across pairs
                 const pct = 50 + Math.round((pairCount / totalPairs) * 50);
                 progressCb(pct);
