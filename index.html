@@ -873,6 +873,9 @@
             theme: 'light'
         };
 
+        State.selectedForExport = new Set();
+
+
         /* ---------- Element refs ---------- */
         const outletSingle = $('outletSingle'), outletCheckboxes = $('outletCheckboxes');
         const btnSelectAll = $('btnSelectAll'), btnReload = $('btnReload'), btnExtract = $('btnExtract');
@@ -1141,37 +1144,59 @@
 
         function toggleFetchSelectAll(e) {
             const checked = e.target.checked;
-            document.querySelectorAll('.fetchRowSelect').forEach(cb => {
+            const boxes = document.querySelectorAll('#fetchResultsContainer .rowSelect');
+
+            boxes.forEach(cb => {
                 cb.checked = checked;
                 const uid = cb.dataset.uid;
                 if (!uid) return;
-                if (checked) addOrderedSelection(uid);
-                else removeOrderedSelection(uid);
+
+                if (checked) {
+                    State.selectedForExport.add(uid);
+                } else {
+                    State.selectedForExport.delete(uid);
+                }
             });
+
+            console.log('Selected UIDs:', [...State.selectedForExport]);
         }
+
+        function onRowSelectChange(e) {
+            const cb = e.target;
+            const uid = cb.dataset.uid;
+            if (!uid) return;
+
+            if (cb.checked) {
+                State.selectedForExport.add(uid);
+            } else {
+                State.selectedForExport.delete(uid);
+            }
+
+            console.log('Selected UIDs:', [...State.selectedForExport]);
+        }
+
 
         // row checkbox change for normal page (REPLACEMENT)
         function onRowSelectChange(e) {
-            const uid = e.target.dataset.uid;
-            const tr = e.target.closest('tr');
-            if (e.target.checked) {
-                addOrderedSelection(uid);
-                if (tr) tr.classList.add('row-selected');
+            const cb = e.target;
+            const tr = cb.closest('tr');
+            if (!tr) return;
+
+            const uid = cb.dataset.uid;
+            if (!uid) return;
+
+            // Ensure state exists
+            State.selectedForExport = State.selectedForExport || new Set();
+
+            if (cb.checked) {
+                State.selectedForExport.add(uid);
             } else {
-                removeOrderedSelection(uid);
-                if (tr) tr.classList.remove('row-selected');
+                State.selectedForExport.delete(uid);
             }
 
-            // update header checkbox state (same logic as before)
-            const visibleBoxes = Array.from(document.querySelectorAll('#normalTableContainer tbody .rowSelect') || []);
-            const header = document.getElementById('selectAllVisible');
-            if (header) {
-                const all = visibleBoxes.length > 0 && visibleBoxes.every(b => b.checked);
-                const any = visibleBoxes.some(b => b.checked);
-                header.checked = all;
-                header.indeterminate = !all && any;
-            }
+            updateCreateExportButtons?.();
         }
+
 
         // header-select-all for filter page (only toggles visible rows in the current filter table)
         function onToggleFilterSelectAllVisible(e) {
