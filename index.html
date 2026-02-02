@@ -992,30 +992,6 @@
         window.addEventListener('hashchange', () => showPage(location.hash));
         function initRouter() { if (!location.hash) location.hash = '#/normal'; showPage(location.hash); }
 
-        /* ---------- Fetch + Flatten ---------- */
-        async function fetchOutlet(outletId) {
-            if (State.cache[outletId]) return State.cache[outletId].data;
-            const url = createApiUrl(outletId);
-            try {
-                const resp = await timeoutPromise(fetch(url), CONFIG.FETCH_TIMEOUT);
-                if (!resp.ok) throw new Error('HTTP ' + resp.status);
-                const data = await resp.json();
-                let items = [];
-                if (Array.isArray(data)) items = data;
-                else if (Array.isArray(data.streams)) items = data.streams;
-                else if (Array.isArray(data.items)) items = data.items;
-                else if (typeof data === 'object' && data.streamId) items = [data];
-                State.cache[outletId] = { fetchedAt: Date.now(), data: items };
-                State.flattened[outletId] = items.map(flattenStream);
-                return items;
-            } catch (err) {
-                console.error('fetch error', err);
-                hideLoading();
-                State.cache[outletId] = { fetchedAt: Date.now(), data: [], error: err.message };
-                State.flattened[outletId] = [];
-                return [];
-            }
-        }
 
         function flattenStream(s) {
             const row = {};
@@ -1146,6 +1122,9 @@
             const checked = e.target.checked;
             const boxes = document.querySelectorAll('#fetchResultsContainer .rowSelect');
 
+            State.selectedForExport = State.selectedForExport || new Set();
+            State.selectedForExportOrdered = State.selectedForExportOrdered || [];
+
             boxes.forEach(cb => {
                 cb.checked = checked;
                 const uid = cb.dataset.uid;
@@ -1153,48 +1132,41 @@
 
                 if (checked) {
                     State.selectedForExport.add(uid);
+                    if (!State.selectedForExportOrdered.includes(uid)) {
+                        State.selectedForExportOrdered.push(uid);
+                    }
                 } else {
                     State.selectedForExport.delete(uid);
+                    const idx = State.selectedForExportOrdered.indexOf(uid);
+                    if (idx !== -1) State.selectedForExportOrdered.splice(idx, 1);
                 }
             });
 
-            console.log('Selected UIDs:', [...State.selectedForExport]);
+            console.log('[select-all]', [...State.selectedForExport]);
         }
+
 
         function onRowSelectChange(e) {
             const cb = e.target;
             const uid = cb.dataset.uid;
             if (!uid) return;
 
-            if (cb.checked) {
-                State.selectedForExport.add(uid);
-            } else {
-                State.selectedForExport.delete(uid);
-            }
-
-            console.log('Selected UIDs:', [...State.selectedForExport]);
-        }
-
-
-        // row checkbox change for normal page (REPLACEMENT)
-        function onRowSelectChange(e) {
-            const cb = e.target;
-            const tr = cb.closest('tr');
-            if (!tr) return;
-
-            const uid = cb.dataset.uid;
-            if (!uid) return;
-
-            // Ensure state exists
+            // ensure state exists
             State.selectedForExport = State.selectedForExport || new Set();
+            State.selectedForExportOrdered = State.selectedForExportOrdered || [];
 
             if (cb.checked) {
                 State.selectedForExport.add(uid);
+                if (!State.selectedForExportOrdered.includes(uid)) {
+                    State.selectedForExportOrdered.push(uid);
+                }
             } else {
                 State.selectedForExport.delete(uid);
+                const idx = State.selectedForExportOrdered.indexOf(uid);
+                if (idx !== -1) State.selectedForExportOrdered.splice(idx, 1);
             }
 
-            updateCreateExportButtons?.();
+            console.log('[select]', uid, '=>', [...State.selectedForExport]);
         }
 
 
